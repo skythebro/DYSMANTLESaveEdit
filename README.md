@@ -77,14 +77,14 @@ Before using the editor, ensure you have the following:
 - **Backup Your Files**: Although the editor creates backups, always keep manual backups of your `.save` files to avoid data loss.
 - **Compression**: The editor uses zlib compression (level 9) and updates the file header to match the new compressed length. This works for most cases, but compatibility may vary as the project is WIP.
 - **Game Compatibility**: The editor is designed for *Dysmantle* save files as of June 2025. Game updates may alter save file formats, requiring editor updates. Check for new releases if issues occur.
-- **Error Handling**: If you encounter errors (e.g., "Invalid XML" or "Decompressed data length mismatch"), verify your `.save` file is valid and contact the developer with error details. Error handling is WIP and may improve.
+- **Error Handling**: If you encounter errors (e.g., "Invalid XML" or "Decompressed data length mismatch"), verify your `.save` file is valid and  with error details. Error handling is WIP and may improve.
 
 ## Troubleshooting
 
 - **"No valid XML found" Error**: Ensure the `.save` file is a valid *Dysmantle* save file. Try a different file or check for game updates, as the editor is WIP.
 - **Game Rejects Edited File**: Verify the backup file works in-game. If issues persist, the save file format may have changed. Revert to a backup and check for editor updates.
 - **UI Issues**: If the interface is unresponsive or fields don’t display, ensure Python and `tkinter` are correctly installed. The UI is WIP and may be refined.
-- **Contact**: For bugs or questions, report issues on the repository (TBD, as this is WIP) or contact the developer.
+- **Contact**: For bugs or questions, make an issue provide as much info as possible.
 
 ## Contributing
 
