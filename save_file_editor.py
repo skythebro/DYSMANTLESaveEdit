@@ -195,13 +195,103 @@ class SaveFileEditor:
                 self._render_respawn_node(scrollable_frame, node)
             elif node_id == "statistics":
                 self._render_generic_node(scrollable_frame, node, vertical_layout=False)
-            elif node_id in {"discovered_tower_areas", "material_storage"}:
+            elif node_id == "discovered_tower_areas":
                 self._render_generic_node(scrollable_frame, node, vertical_layout=True)
+            elif node_id == "material_storage":
+                self._render_material_storage_node(scrollable_frame, node)
             else:
                 self._render_generic_node(scrollable_frame, node)
 
         if inventory_slots:
             self._render_inventory_slots(scrollable_frame, inventory_slots)
+
+    def _render_material_storage_node(self, parent, node):
+        """Render the material_storage node with quantity entries, remove buttons, and an add material section."""
+        node_id = node.attrib.get('id', 'material_storage')
+        frame = tk.LabelFrame(parent, text=node_id, padx=10, pady=5)
+        frame.pack(fill="x", padx=5, pady=5)
+
+        # Container for material entries
+        entries_container = tk.Frame(frame)
+        entries_container.pack(fill="x", anchor="w")
+
+        # Track material entries and their widgets
+        material_entries = []
+
+        # Validation for quantity inputs
+        def validate_numeric_input(action, index, value_if_allowed, prior_value, text, validation_type, trigger_type, widget_name):
+            if value_if_allowed == "":
+                return True
+            try:
+                int(value_if_allowed)  # Quantities are integers
+                return True
+            except ValueError:
+                return False
+
+        vcmd = (self.root.register(validate_numeric_input), '%d', '%i', '%P', '%s', '%S', '%v', '%V', '%W')
+
+        # Render existing materials
+        for attr_name, attr_value in node.attrib.items():
+            if attr_name == "id" or attr_name not in self.all_materials:
+                continue
+
+            def create_remove_handler(attr, entry_frame):
+                def remove_material():
+                    # Remove from player_state_widgets
+                    self.player_state_widgets.pop((node_id, attr), None)
+                    # Remove from node attributes
+                    if attr in node.attrib:
+                        del node.attrib[attr]
+                    # Destroy the entry frame
+                    entry_frame.destroy()
+                    # Update add material dropdown
+                    update_add_dropdown()
+                return remove_material
+
+            entry_frame = tk.Frame(entries_container)
+            entry_frame.pack(fill="x", pady=2)
+            tk.Label(entry_frame, text=attr_name, width=20).pack(side="left")
+            quantity_var = tk.StringVar(value=attr_value)
+            tk.Entry(entry_frame, textvariable=quantity_var, width=8, validate="key", validatecommand=vcmd).pack(side="left", padx=5)
+            tk.Button(entry_frame, text="Remove", command=create_remove_handler(attr_name, entry_frame)).pack(side="left", padx=5)
+            self.player_state_widgets[(node_id, attr_name)] = quantity_var
+            material_entries.append(entry_frame)
+
+        # Add material section
+        add_frame = tk.Frame(frame)
+        add_frame.pack(fill="x", pady=5)
+        tk.Label(add_frame, text="Add Material:").pack(side="left")
+
+        def update_add_dropdown():
+            current_materials = {attr for attr in node.attrib if attr in self.all_materials and attr != ""}
+            available_materials = [m for m in self.all_materials if m not in current_materials and m != ""]
+            material_var.set(available_materials[0] if available_materials else "")
+            menu = add_dropdown["menu"]
+            menu.delete(0, "end")
+            for material in available_materials:
+                menu.add_command(label=material, command=lambda m=material: material_var.set(m))
+
+        material_var = tk.StringVar(value="")
+        add_dropdown = tk.OptionMenu(add_frame, material_var, *self.all_materials[1:])  # Exclude empty string
+        add_dropdown.config(width=20)
+        add_dropdown.pack(side="left", padx=5)
+
+        def add_material():
+            material = material_var.get()
+            if material and material not in node.attrib:
+                node.attrib[material] = "0"  # Default quantity
+                entry_frame = tk.Frame(entries_container)
+                entry_frame.pack(fill="x", pady=2)
+                tk.Label(entry_frame, text=material, width=20).pack(side="left")
+                quantity_var = tk.StringVar(value="0")
+                tk.Entry(entry_frame, textvariable=quantity_var, width=8, validate="key", validatecommand=vcmd).pack(side="left", padx=5)
+                tk.Button(entry_frame, text="Remove", command=create_remove_handler(material, entry_frame)).pack(side="left", padx=5)
+                self.player_state_widgets[(node_id, material)] = quantity_var
+                material_entries.append(entry_frame)
+                update_add_dropdown()
+
+        tk.Button(add_frame, text="Add", command=add_material).pack(side="left", padx=5)
+        update_add_dropdown()
 
     def _render_generic_node(self, parent, node, vertical_layout=False):
         """Render a generic node with attributes as entries or checkboxes."""
@@ -372,29 +462,30 @@ class SaveFileEditor:
         try:
             # Update XML attributes from UI widgets
             for node in self.xml_root.findall('.//node'):
-                node_id = node.attrib.get('id')
-                if not node_id:
-                    continue
-                keys_for_node = [key for key in self.player_state_widgets if key[0] == node_id]
-                loc_x_var = self.player_state_widgets.get((node_id, "location_x"))
-                loc_y_var = self.player_state_widgets.get((node_id, "location_y"))
-                loc_z_var = self.player_state_widgets.get((node_id, "location_z"))
-                if loc_x_var and loc_y_var and loc_z_var:
-                    node.attrib["location"] = ",".join([loc_x_var.get(), loc_y_var.get(), loc_z_var.get()])
-                for key in keys_for_node:
-                    attr = key[1]
-                    if attr in ("location_x", "location_y", "location_z"):
+                for node in self.xml_root.findall('.//node'):
+                    node_id = node.attrib.get('id')
+                    if not node_id:
                         continue
-                    widget_var = self.player_state_widgets[key]
-                    new_val = widget_var.get()
-                    if attr == "material":
-                        amount_var = self.player_state_widgets.get((node_id, "amount"))
-                        amount_val = amount_var.get() if amount_var else "0"
-                        if amount_val == "0" or amount_val == "" or int(amount_val) == 0:
-                            if "material" in node.attrib:
-                                del node.attrib["material"]
+                    keys_for_node = [key for key in self.player_state_widgets if key[0] == node_id]
+                    loc_x_var = self.player_state_widgets.get((node_id, "location_x"))
+                    loc_y_var = self.player_state_widgets.get((node_id, "location_y"))
+                    loc_z_var = self.player_state_widgets.get((node_id, "location_z"))
+                    if loc_x_var and loc_y_var and loc_z_var:
+                        node.attrib["location"] = ",".join([loc_x_var.get(), loc_y_var.get(), loc_z_var.get()])
+                    for key in keys_for_node:
+                        attr = key[1]
+                        if attr in ("location_x", "location_y", "location_z"):
                             continue
-                    node.attrib[attr] = str(new_val)
+                        widget_var = self.player_state_widgets[key]
+                        new_val = widget_var.get()
+                        if attr == "material":
+                            amount_var = self.player_state_widgets.get((node_id, "amount"))
+                            amount_val = amount_var.get() if amount_var else "0"
+                            if amount_val == "0" or amount_val == "" or int(amount_val) == 0:
+                                if "material" in node.attrib:
+                                    del node.attrib["material"]
+                                continue
+                        node.attrib[attr] = str(new_val)
 
             # Serialize updated XML
             new_xml_bytes = ET.tostring(self.xml_root, encoding='iso-8859-1')
