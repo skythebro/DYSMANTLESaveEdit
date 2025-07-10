@@ -45,6 +45,19 @@ class SaveFileEditor:
             "BEAM_GUN_BATTERY"
         ]
 
+        self.all_towers = [
+            "TOWER_MID_NE", "TOWER_MID_SE", "TOWER_NW_MID", "TOWER_MID_WEST",
+            "TOWER_MID_HILL", "TOWER_MID_NW", "TOWER_NW_TIP", "TOWER_E_ISLAND",
+            "TOWER_SW_TIP", "TOWER_E", "TOWER_SE_MID", "TOWER_SE_TIP",
+            "TOWER_NE_MID", "TOWER_S_TIP", "TOWER_NE_TIP", "TOWER_NE_ISLAND",
+            "TOWER_NW_ISLAND", "TOWER_MID_SW", "TOWER_E_SHORE",
+            "UW_UNDERCROWN",
+            "DLC1_TOWER_A", "DLC1_TOWER_B", "DLC1_TOWER_C",
+            "DLC2_TOWER_A", "DLC2_TOWER_B", "DLC2_TOWER_C", "DLC2_TOWER_D",
+            "DLC3_TOWER_NW", "DLC3_TOWER_NE", "DLC3_TOWER_SW", "DLC3_TOWER_SE",
+            "DLC3_TOWER_CENTER", "DLC3_TOWER_DLC1", "DLC3_TOWER_DLC2"
+        ]
+
         self.info_label = tk.Label(
             root,
             text="Dysmantle Save File Editor\nUpload your DYSMANTLE .save file to edit its data.\nBackups are saved in the 'backups' folder.",
@@ -199,6 +212,8 @@ class SaveFileEditor:
                 self._render_generic_node(scrollable_frame, node, vertical_layout=True)
             elif node_id == "material_storage":
                 self._render_material_storage_node(scrollable_frame, node)
+            elif node_id == "tower_area_level":
+                self._render_tower_area_level_node(scrollable_frame, node)
             else:
                 self._render_generic_node(scrollable_frame, node)
 
@@ -291,6 +306,96 @@ class SaveFileEditor:
                 update_add_dropdown()
 
         tk.Button(add_frame, text="Add", command=add_material).pack(side="left", padx=5)
+        update_add_dropdown()
+
+    def _render_tower_area_level_node(self, parent, node):
+        """Render the tower_area_level node with level entries, remove buttons, and an add tower section."""
+        node_id = node.attrib.get('id', 'tower_area_level')
+        frame = tk.LabelFrame(parent, text=node_id, padx=10, pady=5)
+        frame.pack(fill="x", padx=5, pady=5)
+
+        # Container for tower entries
+        entries_container = tk.Frame(frame)
+        entries_container.pack(fill="x", anchor="w")
+
+        # Track tower entries and their widgets
+        tower_entries = []
+
+        # Validation for level inputs (integers, typically 1-3)
+        def validate_numeric_input(action, index, value_if_allowed, prior_value, text, validation_type, trigger_type, widget_name):
+            if value_if_allowed == "":
+                return True
+            try:
+                level = int(value_if_allowed)
+                if level < 1 or level > 3:  # Restrict to 1-3 based on example
+                    return False
+                return True
+            except ValueError:
+                return False
+
+        vcmd = (self.root.register(validate_numeric_input), '%d', '%i', '%P', '%s', '%S', '%v', '%V', '%W')
+
+        # Render existing towers
+        for attr_name, attr_value in node.attrib.items():
+            if attr_name == "id" or attr_name not in self.all_towers:
+                continue
+
+            def create_remove_handler(attr, entry_frame):
+                def remove_tower():
+                    # Remove from player_state_widgets
+                    self.player_state_widgets.pop((node_id, attr), None)
+                    # Remove from node attributes
+                    if attr in node.attrib:
+                        del node.attrib[attr]
+                    # Destroy the entry frame
+                    entry_frame.destroy()
+                    # Update add tower dropdown
+                    update_add_dropdown()
+                return remove_tower
+
+            entry_frame = tk.Frame(entries_container)
+            entry_frame.pack(fill="x", pady=2)
+            tk.Label(entry_frame, text=attr_name, width=20).pack(side="left")
+            level_var = tk.StringVar(value=attr_value)
+            tk.Entry(entry_frame, textvariable=level_var, width=8, validate="key", validatecommand=vcmd).pack(side="left", padx=5)
+            tk.Button(entry_frame, text="Remove", command=create_remove_handler(attr_name, entry_frame)).pack(side="left", padx=5)
+            self.player_state_widgets[(node_id, attr_name)] = level_var
+            tower_entries.append(entry_frame)
+
+        # Add tower section
+        add_frame = tk.Frame(frame)
+        add_frame.pack(fill="x", pady=5)
+        tk.Label(add_frame, text="Add Tower:").pack(side="left")
+
+        def update_add_dropdown():
+            current_towers = {attr for attr in node.attrib if attr in self.all_towers}
+            available_towers = [t for t in self.all_towers if t not in current_towers]
+            tower_var.set(available_towers[0] if available_towers else "")
+            menu = add_dropdown["menu"]
+            menu.delete(0, "end")
+            for tower in available_towers:
+                menu.add_command(label=tower, command=lambda t=tower: tower_var.set(t))
+
+        tower_var = tk.StringVar(value="")
+        add_dropdown = tk.OptionMenu(add_frame, tower_var, *self.all_towers)
+        add_dropdown.config(width=20)
+        add_dropdown.pack(side="left", padx=5)
+
+        def add_tower():
+            tower = tower_var.get()
+            if tower and tower not in node.attrib:
+                node.attrib[tower] = "1"  # Default level 1
+                entry_frame = tk.Frame(entries_container)
+                entry_frame.pack(fill="x", pady=2)
+                tk.Label(entry_frame, text=tower, width=20).pack(side="left")
+                level_var = tk.StringVar(value="1")
+                tk.Entry(entry_frame, textvariable=level_var, width=8, validate="key", validatecommand=vcmd).pack(side="left", padx=5)
+                tk.Button(entry_frame, text="Remove", command=create_remove_handler(tower, entry_frame)).pack(side="left", padx=5)
+                self.player_state_widgets[(node_id, tower)] = level_var
+                tower_entries.append(entry_frame)
+                update_add_dropdown()
+
+        tk.Button(add_frame, text="Add", command=add_tower).pack(side="left", padx=5)
         update_add_dropdown()
 
     def _render_generic_node(self, parent, node, vertical_layout=False):
@@ -462,30 +567,69 @@ class SaveFileEditor:
         try:
             # Update XML attributes from UI widgets
             for node in self.xml_root.findall('.//node'):
-                for node in self.xml_root.findall('.//node'):
-                    node_id = node.attrib.get('id')
-                    if not node_id:
+                node_id = node.attrib.get('id')
+                if not node_id:
+                    continue
+                keys_for_node = [key for key in self.player_state_widgets if key[0] == node_id]
+                
+                # For material_storage and tower_area_level, sync attributes with player_state_widgets
+                if node_id in ("material_storage", "tower_area_level"):
+                    # Keep only attributes present in player_state_widgets (and id)
+                    valid_attrs = self.all_materials if node_id == "material_storage" else self.all_towers
+                    current_attrs = set(node.attrib.keys()) - {"id"}
+                    widget_attrs = {key[1] for key in keys_for_node}
+                    for attr in current_attrs:
+                        if attr not in widget_attrs:
+                            del node.attrib[attr]
+                
+                loc_x_var = self.player_state_widgets.get((node_id, "location_x"))
+                loc_y_var = self.player_state_widgets.get((node_id, "location_y"))
+                loc_z_var = self.player_state_widgets.get((node_id, "location_z"))
+                if loc_x_var and loc_y_var and loc_z_var:
+                    try:
+                        x, y, z = loc_x_var.get(), loc_y_var.get(), loc_z_var.get()
+                        float(x), float(y), float(z)  # Validate as numbers
+                        node.attrib["location"] = ",".join([x, y, z])
+                    except ValueError:
+                        logger.error(f"Invalid location values for {node_id}: x={x}, y={y}, z={z}")
+                        messagebox.showerror("Error", f"Invalid location values for {node_id}. Save aborted.")
+                        return
+
+                for key in keys_for_node:
+                    attr = key[1]
+                    if attr in ("location_x", "location_y", "location_z"):
                         continue
-                    keys_for_node = [key for key in self.player_state_widgets if key[0] == node_id]
-                    loc_x_var = self.player_state_widgets.get((node_id, "location_x"))
-                    loc_y_var = self.player_state_widgets.get((node_id, "location_y"))
-                    loc_z_var = self.player_state_widgets.get((node_id, "location_z"))
-                    if loc_x_var and loc_y_var and loc_z_var:
-                        node.attrib["location"] = ",".join([loc_x_var.get(), loc_y_var.get(), loc_z_var.get()])
-                    for key in keys_for_node:
-                        attr = key[1]
-                        if attr in ("location_x", "location_y", "location_z"):
-                            continue
-                        widget_var = self.player_state_widgets[key]
-                        new_val = widget_var.get()
-                        if attr == "material":
-                            amount_var = self.player_state_widgets.get((node_id, "amount"))
-                            amount_val = amount_var.get() if amount_var else "0"
+                    widget_var = self.player_state_widgets[key]
+                    new_val = widget_var.get()
+                    if attr == "material" and node_id.startswith("slot_"):
+                        amount_var = self.player_state_widgets.get((node_id, "amount"))
+                        amount_val = amount_var.get() if amount_var else "0"
+                        try:
                             if amount_val == "0" or amount_val == "" or int(amount_val) == 0:
                                 if "material" in node.attrib:
                                     del node.attrib["material"]
                                 continue
-                        node.attrib[attr] = str(new_val)
+                        except ValueError:
+                            logger.error(f"Invalid amount for {node_id}: {amount_val}")
+                            messagebox.showerror("Error", f"Invalid amount for {node_id}. Save aborted.")
+                            return
+                    # For material_storage and tower_area_level, ensure valid attribute and integer value
+                    if node_id in ("material_storage", "tower_area_level"):
+                        valid_attrs = self.all_materials if node_id == "material_storage" else self.all_towers
+                        if attr not in valid_attrs:
+                            logger.warning(f"Ignoring invalid attribute for {node_id}: {attr}")
+                            continue
+                        try:
+                            int(new_val)  # Validate as integer
+                            if node_id == "tower_area_level" and (int(new_val) < 1 or int(new_val) > 3):
+                                logger.error(f"Invalid level for {node_id}.{attr}: {new_val}")
+                                messagebox.showerror("Error", f"Level for {node_id}.{attr} must be 1-3. Save aborted.")
+                                return
+                        except ValueError:
+                            logger.error(f"Invalid value for {node_id}.{attr}: {new_val}")
+                            messagebox.showerror("Error", f"Invalid value for {node_id}.{attr}. Save aborted.")
+                            return
+                    node.attrib[attr] = str(new_val)
 
             # Serialize updated XML
             new_xml_bytes = ET.tostring(self.xml_root, encoding='iso-8859-1')
